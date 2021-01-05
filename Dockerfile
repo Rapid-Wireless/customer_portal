@@ -8,12 +8,12 @@ RUN add-apt-repository ppa:ondrej/php \
       gettext \
       nginx \
       php7.3-fpm \
-      php-bcmath \
-      php-curl \
-      php-gmp \
-      php-mbstring \
-      php-sqlite3 \
-      php-zip \
+      php7.3-bcmath \
+      php7.3-curl \
+      php7.3-gmp \
+      php7.3-mbstring \
+      php7.3-sqlite3 \
+      php7.3-zip \
       unzip
 
 WORKDIR /var/www/html
@@ -28,6 +28,8 @@ COPY --chown=www-data . .
 
 RUN COMPOSER_CACHE_DIR=/dev/null setuser www-data /tmp/composer install --no-dev --no-interaction --no-scripts --classmap-authoritative \
  && rm -rf /tmp/composer
+
+COPY deploy/conf/nginx/sonar-customerportal.template /etc/nginx/conf.d/customerportal.template
 
 COPY deploy/conf/php-fpm/ /etc/php/7.3/fpm/
 

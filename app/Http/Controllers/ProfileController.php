@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Http\Requests\UpdatePasswordRequest;
+use App\SystemSetting;
 use Exception;
 use Illuminate\Http\Request;
 
@@ -37,8 +38,9 @@ class ProfileController extends Controller
                 $phoneNumbers[$phoneNumber->getType()] = $phoneNumber->getNumber();
             }
         }
+        $country = SystemSetting::first()->country;
 
-        return view("pages.profile.show", compact('user', 'contact', 'phoneNumbers'));
+        return view("pages.profile.show", compact('user', 'contact', 'phoneNumbers', 'country'));
     }
 
     /**
@@ -51,7 +53,6 @@ class ProfileController extends Controller
         $contact = $this->getContact();
 
         $contact->setName($request->input('name'));
-        $contact->setRole($request->input('role'));
         $contact->setEmailAddress($request->input('email_address'));
 
         try {
@@ -78,7 +79,7 @@ class ProfileController extends Controller
         try {
             $contactController->updateContact($contact);
         } catch (Exception $e) {
-            Log::error($e->getMessage());
+            Log::error($e);
             return redirect()->back()->withErrors(utrans("errors.failedToUpdateProfile"));
         }
 

@@ -122,6 +122,9 @@ class AppConfigController extends Controller
                 'go_cardless_environment',
                 'go_cardless_access_token',
                 'go_cardless_currency_code',
+                'stripe_enabled',
+                'stripe_private_api_key',
+                'stripe_public_api_key',
                 'paypal_enabled',
                 'paypal_api_client',
                 'paypal_api_client_secret',
@@ -132,7 +135,10 @@ class AppConfigController extends Controller
                 'ticket_priority',
             ]));
 
-
+            /**
+             * CHANGE LOGIN MESSAGE TO HTMLENTITIES
+             */
+            $systemSetting->login_page_message = htmlentities($request->input('login_page_message'), ENT_QUOTES);
 
             $systemSetting->save();
 

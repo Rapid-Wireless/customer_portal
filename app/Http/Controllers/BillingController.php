@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Billing\GoCardless;
+use App\Billing\PortalStripe;
 use App\Http\Requests\CreateBankAccountRequest;
 use App\Http\Requests\CreateCreditCardRequest;
+use App\Http\Requests\CreateTokenizedCreditCardRequest;
 use App\Http\Requests\CreditCardPaymentRequest;
+use App\Http\Requests\TokenizedCreditCardPaymentRequest;
 use App\Http\Requests\PaymentMethodDeleteRequest;
 use App\Services\LanguageService;
 use App\SystemSetting;
@@ -15,9 +18,12 @@ use Exception;
 use Illuminate\Http\Request;
 
 use App\Http\Requests;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Input;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Session;
@@ -26,6 +32,8 @@ use InvalidArgumentException;
 use SonarSoftware\CustomerPortalFramework\Controllers\AccountBillingController;
 use SonarSoftware\CustomerPortalFramework\Models\BankAccount;
 use SonarSoftware\CustomerPortalFramework\Models\CreditCard;
+use SonarSoftware\CustomerPortalFramework\Models\TokenizedCreditCard;
+use Stripe\Token;
 
 class BillingController extends Controller
 {
@@ -45,7 +53,9 @@ class BillingController extends Controller
     {
         $billingDetails = $this->getAccountBillingDetails();
         $invoices = $this->getInvoices();
+        $invoices = $this->paginate($invoices, 5, false, ['path' => '/portal/billing/invoices']);
         $transactions = $this->getTransactions();
+        $transactions = $this->paginate($transactions, 5, false, ['path' => '/portal/billing/transaction']);
         $paymentMethods = $this->getPaymentMethods();
 
 	    $historicalUsage = $this->getHistoricalUsage();
@@ -88,7 +98,7 @@ class BillingController extends Controller
             'Content-Disposition' => "attachment; filename=Invoice $invoiceID.pdf",
         ]);
     }
-    
+
     /**
      * Make payment page
      * @return \Illuminate\Contracts\View\Factory|\Illuminate\View\View
@@ -102,7 +112,57 @@ class BillingController extends Controller
             return redirect()->back()->withErrors(utrans("errors.addAPaymentMethod"));
         }
 
+        if (config('customer_portal.stripe_enabled') == 1)
+        {
+            $stripe = new PortalStripe();
+            $secret = $stripe->setupIntent();
+            $systemSettings = SystemSetting::first();
+            $key = $systemSettings->stripe_public_api_key;
+            return view(
+                'pages.billing.make_payment_stripe',
+                compact('billingDetails', 'paymentMethods', 'secret', 'key')
+            );
+        }
+
         return view('pages.billing.make_payment', compact('billingDetails', 'paymentMethods'));
+    }
+
+    /**
+     * Process a tokenized submitted payment
+     * @param TokenizedCreditCardPaymentRequest $request
+     * @return $this
+     */
+    public function submitTokenizedPayment(TokenizedCreditCardPaymentRequest $request)
+    {
+        switch ($request->input('payment_method')) {
+            case "new_card":
+                try {
+                    $result = $this->payWithNewTokenizedCreditCard($request);
+                } catch (Exception $e) {
+                    Log::error($e->getMessage());
+                    return redirect()->back()->withErrors($e->getMessage())->withInput();
+                }
+                break;
+            default:
+                try {
+                    $result = $this->payWithExistingPaymentMethod($request);
+                } catch (Exception $e) {
+                    Log::error($e->getMessage());
+                    return redirect()->back()->withErrors($e->getMessage())->withInput();
+                }
+                break;
+        }
+
+        $this->clearBillingCache();
+        if ($result->success == true)
+        {
+            return redirect()->action("BillingController@index")->with('success', utrans("billing.paymentWasSuccessful"));
+        }
+        else
+        {
+            return redirect()->back()->withErrors(utrans("errors.paymentFailed"));
+        }
+
     }
 
     /**
@@ -172,7 +232,7 @@ class BillingController extends Controller
                 }
             }
         }
-        
+
         return redirect()->back()->withErrors(utrans("errors.paymentMethodNotFound"));
     }
 
@@ -213,7 +273,19 @@ class BillingController extends Controller
         switch ($type)
         {
             case "credit_card":
-                return view("pages.billing.add_card");
+                if (config("customer_portal.stripe_enabled") == 1)
+                {
+                    $stripe = new PortalStripe();
+                    $systemSettings = SystemSetting::first();
+                    return view("pages.billing.add_card_stripe", [
+                        'secret' => $stripe->setupIntent(),
+                        'key' => $systemSettings->stripe_public_api_key
+                    ]);
+                }
+                else
+                {
+                    return view("pages.billing.add_card");
+                }
                 break;
             case "bank":
                 if (config("customer_portal.enable_gocardless") == 1)
@@ -229,6 +301,38 @@ class BillingController extends Controller
             default:
                 return redirect()->back()->withErrors(utrans("errors.invalidPaymentMethodType"));
         }
+    }
+
+    /**
+     * Store a new tokenized credit card
+     * @param CreateTokenizedCreditCardRequest $request
+     * @return $this|mixed
+     */
+    public function storeTokenizedCard(CreateTokenizedCreditCardRequest $request)
+    {
+        if (config("customer_portal.enable_credit_card_payments") == false)
+        {
+            throw new InvalidArgumentException(utrans("errors.creditCardPaymentsDisabled"));
+        }
+
+        try {
+            $card = $this->createTokenizedCreditCardObjectFromRequest($request);
+        } catch (Exception $e) {
+            return redirect()->back()->withErrors($e->getMessage())->withInput();
+        }
+
+        try {
+            $this->accountBillingController->createTokenizedCreditCard(
+                get_user()->account_id,
+                $card,
+                (bool)$request->input('auto')
+            );
+        } catch (Exception $e) {
+            return redirect()->back()->withErrors(utrans("errors.failedToCreateCard"))->withInput();
+        }
+
+        $this->clearBillingCache();
+        return redirect()->action("BillingController@index")->with('success', utrans("billing.cardAdded"));
     }
 
     /**
@@ -254,7 +358,7 @@ class BillingController extends Controller
         } catch (Exception $e) {
             return redirect()->back()->withErrors(utrans("errors.failedToCreateCard"))->withInput();
         }
-        
+
         unset($creditCard);
         unset($request);
 
@@ -282,8 +386,16 @@ class BillingController extends Controller
         }
 
         try {
-            $this->accountBillingController->createBankAccount(get_user()->account_id, $bankAccount, (bool)$request->input('auto'));
+            $address = [
+                'line1' => $request->input('line1'),
+                'city' => $request->input('city'),
+                'state' => $request->input('state'),
+                'zip' => $request->input('zip'),
+                'country' => $request->input('country'),
+            ];
+            $this->accountBillingController->createBankAccount(get_user()->account_id, $bankAccount, (bool)$request->input('auto'), $address);
         } catch (Exception $e) {
+            Log::error($e);
             return redirect()->back()->withErrors(utrans("errors.failedToCreateBankAccount"))->withInput();
         }
 
@@ -302,7 +414,7 @@ class BillingController extends Controller
      */
     private function payWithExistingPaymentMethod($request)
     {
-        
+
         try {
             $result = $this->accountBillingController->makePaymentUsingExistingPaymentMethod(get_user()->account_id, intval($request->input('payment_method')), trim($request->input('amount')));
         } catch (Exception $e) {
@@ -313,6 +425,8 @@ class BillingController extends Controller
         if ($result->success !== true) {
             throw new Exception(utrans("billing.paymentFailedTryAnother"));
         }
+
+        Log::info(json_encode($result));
 
         return $result;
     }
@@ -333,6 +447,41 @@ class BillingController extends Controller
 
         try {
             $result = $this->accountBillingController->makeCreditCardPayment(get_user()->account_id, $creditCard, $request->input('amount'), (boolean)$request->input('makeAuto'));
+        } catch (Exception $e) {
+            throw new InvalidArgumentException(utrans("billing.errorSubmittingPayment"));
+        }
+
+        if ($result->success !== true) {
+            throw new InvalidArgumentException(utrans("errors.paymentFailed"));
+        }
+
+        unset($creditCard);
+        unset($request);
+
+        return $result;
+    }
+
+    /**
+     * Make a payment with a new tokenized credit card
+     * @param TokenizedCreditCardPaymentRequest $request
+     * @return mixed
+     */
+    public function payWithNewTokenizedCreditCard(TokenizedCreditCardPaymentRequest $request)
+    {
+        if (config("customer_portal.enable_credit_card_payments") == false)
+        {
+            throw new InvalidArgumentException(utrans("errors.creditCardPaymentsDisabled"));
+        }
+
+        $creditCard = $this->createTokenizedCreditCardObjectFromRequest($request);
+
+        try {
+            $result = $this->accountBillingController->makeTokenizedCreditCardPayment(
+                get_user()->account_id,
+                $creditCard,
+                $request->input('amount'),
+                (boolean)$request->input('makeAuto')
+            );
         } catch (Exception $e) {
             throw new InvalidArgumentException(utrans("billing.errorSubmittingPayment"));
         }
@@ -393,7 +542,7 @@ class BillingController extends Controller
      */
     private function getTransactions()
     {
-        
+
         if (!Cache::tags("billing.transactions")->has(get_user()->account_id)) {
             $transactions = [];
             $debits = $this->accountBillingController->getDebits(get_user()->account_id);
@@ -524,20 +673,15 @@ class BillingController extends Controller
             throw new InvalidArgumentException(utrans("errors.invalidCreditCardNumber"));
         }
 
-        $expiration = $request->input('expirationDate');
-        $boom = explode(" / ", $expiration);
-        $month = ltrim(trim($boom[0]), 0);
-        $year = trim($boom[1]);
-        if (strlen($year) == 2) {
-            $now = Carbon::now(config("app.timezone"));
-            $year = substr($now->year, 0, 2) . $year;
-        }
+        list($year, $month) = convertExpirationDateToYearAndMonth(
+            $request->input('expirationDate')
+        );
 
-        if (CreditCardValidator::validDate($year, $month) !== true) {
+        if (! CreditCardValidator::validDate($year, $month)) {
             throw new InvalidArgumentException(utrans("errors.invalidExpirationDate"));
         }
 
-        $creditCard = new CreditCard([
+       return new CreditCard([
             'name' => $request->input('name'),
             'number' => $card['number'],
             'expiration_month' => intval($month),
@@ -549,8 +693,37 @@ class BillingController extends Controller
             'country' => $request->input('country'),
             'cvc' => $request->input('cvc'),
         ]);
+    }
 
-        return $creditCard;
+    /**
+     * Create a tokenized credit card object from a request
+     * @param $request
+     * @return TokenizedCreditCard
+     */
+    private function createTokenizedCreditCardObjectFromRequest($request)
+    {
+        list($year, $month) = convertExpirationDateToYearAndMonth(
+            $request->input('expirationDate')
+        );
+
+        if (! CreditCardValidator::validDate($year, $month)) {
+            throw new InvalidArgumentException(utrans("errors.invalidExpirationDate"));
+        }
+
+        return new TokenizedCreditCard([
+            'customer_id' => $request->input('customerId'),
+            'token' => $request->input('token'),
+            'identifier' => $request->input('identifier'),
+            'expiration_year' => $year,
+            'expiration_month' => intval($month),
+            'line1' => $request->input('line1'),
+            'city' => $request->input('city'),
+            'state' => $request->input('state'),
+            'zip' => $request->input('zip'),
+            'country' => $request->input('country'),
+            'name' => $request->input('name'),
+            'card_type' => $request->input('cardType'),
+        ]);
     }
 
     /**
@@ -660,6 +833,31 @@ class BillingController extends Controller
             ]);
         }
         return $formattedData;
+    }
+
+    private function paginate($items, $perPage, $setDefaultOption = true, $options = [])
+    {
+        if($setDefaultOption){
+            $options = ['path' => request()->url(), 'query' => request()->query()];
+        }
+
+        $requestUrl = $this->cleanUrl(request()->url());
+
+        if (isset($options['path']) && $_SERVER['HTTP_HOST'] . $options['path'] == $requestUrl) {
+            $page = Input::get('page', 1); // Get the current page or default to 1
+        } else {
+            $page = 1; // Get the current page or default to 1
+        }
+
+
+        $items = $items instanceof Collection ? $items : Collection::make($items);
+
+        return new LengthAwarePaginator($items->forPage($page, $perPage), $items->count(), $perPage, $page, $options);
+    }
+
+    private function cleanUrl($url)
+    {
+        return str_replace('https://', '', str_replace('http://', '', $url));
     }
 
 }

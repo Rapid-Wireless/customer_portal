@@ -129,12 +129,23 @@
                </div>
             </div>
             <div class="row mt-1">
-               <div class="col-12 ">
+               <div class="col-8 ">
                   <div class="form-group">
                      <label>
                      Mail Password
                      </label>
                      {!! Form::text("mail_password",$systemSetting->mail_password, ['id' => 'mail_password', 'class' => 'form-control', 'placeholder' => "", 'data-toggle' => 'tooltip', 'data-trigger' => 'hover','data-placement' => 'left','data-offset' => '3','data-original-title' => 'The administrative password for your mail server']) !!}
+                  </div>
+               </div>
+               <div class="col-auto ">
+                  <div class="form-group">
+                     <label>
+                     Reveal
+                     </label>
+                     <div class="custom-control custom-checkbox-toggle mt-1">
+                       <input id="passwd-reveal" class="custom-control-input" data-toggle="tooltip" data-trigger="hover" data-placement="left" data-offset="3" name="passwd-reveal" type="checkbox" value="1">
+                       <label class="custom-control-label" for="passwd-reveal"></label>
+                     </div>
                   </div>
                </div>
             </div>
@@ -198,7 +209,7 @@
                <div class="col-12 ">
                   <div class="form-group">
                      <label>
-                     Decimal Seperator
+                     Decimal Separator
                      </label>
                      {!! Form::text("decimal_separator",$systemSetting->decimal_separator,['id' => 'decimal_separator', 'class' => 'form-control', 'placeholder' => ".", 'data-toggle' => 'tooltip', 'data-trigger' => 'hover','data-placement' => 'left','data-offset' => '3','data-html' => 'true', 'data-original-title' => 'The symbol to be used as a decimal, eg $34<strong>.</strong>95']) !!}
                   </div>
@@ -208,7 +219,7 @@
                <div class="col-12 ">
                   <div class="form-group">
                      <label>
-                     Thousands Seperator
+                     Thousands Separator
                      </label>
                      <div class="input-group mb-3">
                         {!! Form::text("thousands_separator",$systemSetting->thousands_separator,['id' => 'thousands_separator', 'class' => 'form-control', 'placeholder' => ",", 'data-toggle' => 'tooltip', 'data-trigger' => 'hover','data-placement' => 'left','data-offset' => '3','data-html' => 'true', 'data-original-title' => 'The symbol to be used as a comma, eg $3<strong>,</strong>953']) !!}
@@ -248,16 +259,7 @@
                </div>
             </div>
 			@endif
-            <div class="row mt-1">
-               <div class="col-12 ">
-                  <div class="form-group">
-                     <label>
-                     Login Page Message
-                     </label>
-                     {!! Form::text("login_page_message",$systemSetting->login_page_message,['id' => 'login_page_message', 'class' => 'form-control', 'placeholder' => "", 'data-toggle' => 'tooltip', 'data-trigger' => 'hover','data-placement' => 'left','data-offset' => '3','data-html' => 'true', 'data-original-title' => 'The message shown to customers on the login page']) !!}
-                  </div>
-               </div>
-            </div>
+
             <div class="row mt-1">
                <div class="form-group">
                   <div class="col-auto ">
@@ -299,6 +301,16 @@
                      Required Password Strength
                      </label>
                      {!! Form::select('password_strength_required', array('1' => 'Minimal', '2' => 'Low', '3' => 'Moderate', '4' => 'High', '5' => 'Maximum'), $systemSetting->password_strength_required,['id' => 'password_strength_required', 'class' => 'form-control', 'data-toggle' => 'select', 'data-toggle' => 'tooltip', 'data-trigger' => 'hover','data-placement' => 'left','data-offset' => '3','data-html' => 'true', 'data-original-title' => 'The password strength standard required for new users and password resets']); !!}
+                  </div>
+               </div>
+            </div>
+            <div class="row mt-1">
+               <div class="col-12 ">
+                  <div class="form-group">
+                     <label>
+                     Login Page Message
+                     </label>
+                     {!! Form::textarea("login_page_message",$systemSetting->login_page_message,['id' => 'login_page_message', 'class' => 'form-control', 'placeholder' => "", 'data-toggle' => 'tooltip', 'data-trigger' => 'hover','data-placement' => 'left','data-offset' => '3','data-html' => 'true', 'data-original-title' => 'The message shown to customers on the login page']) !!}
                   </div>
                </div>
             </div>
@@ -364,6 +376,62 @@
             </div>
          </div>
       </div>
+
+      <!-- Stripe -->
+      <div class="card">
+         <div class="card-header">
+            <h4 class="card-header-title text-muted">
+               <i class="fe fe-credit-card mr-3"></i> Stripe Integration
+            </h4>
+         </div>
+         <div class="card-body">
+            <div class="row mt-1">
+               <div class="form-group">
+                  <div class="col-auto ">
+                     <!-- Toggle -->
+                     <div class="custom-control custom-checkbox-toggle mt-1">
+                        {{ Form::hidden('stripe_enabled',0) }}
+                        {!! Form::checkbox("stripe_enabled",1,$systemSetting->stripe_enabled,['id' => 'stripe_enabled', 'class' => 'custom-control-input', 'data-toggle' => 'tooltip', 'data-trigger' => 'hover','data-placement' => 'left','data-offset' => '3','data-html' => 'true', 'data-original-title' => 'Integrate Stripe into your billing flow']) !!}
+                        <label class="custom-control-label" for="stripe_enabled"></label>
+                     </div>
+                  </div>
+               </div>
+               <div class="col-auto mt-2">
+                  <label>
+                  Enable Stripe*
+                  </label>
+               </div>
+            </div>
+            <div class="row mt-1">
+               <div class="col-12">
+                  <div class="form-group">
+                     <label>
+                        Public API Token
+                     </label>
+                     {!! Form::text("stripe_public_api_key",$systemSetting->stripe_public_api_key,['id' => 'stripe_public_api_key', 'class' => 'form-control', 'placeholder' => "", 'data-toggle' => 'tooltip', 'data-trigger' => 'hover','data-placement' => 'left','data-offset' => '3','data-html' => 'true', 'data-original-title' => 'Your public API token provided by Stripe']) !!}
+                  </div>
+               </div>
+            </div>
+            <div class="row mt-1">
+               <div class="col-12">
+                  <div class="form-group">
+                     <label>
+                        Private API Token
+                     </label>
+                     {!! Form::text("stripe_private_api_key",$systemSetting->stripe_private_api_key,['id' => 'stripe_private_api_key', 'class' => 'form-control', 'placeholder' => "", 'data-toggle' => 'tooltip', 'data-trigger' => 'hover','data-placement' => 'left','data-offset' => '3','data-html' => 'true', 'data-original-title' => 'Your private API token provided by Stripe']) !!}
+                  </div>
+               </div>
+            </div>
+            <div class="row mt-1">
+               <div class="col-12">
+                   <p class="text-muted">
+                     <i>* This is required to use Stripe with Sonar version 2. Version 1 users may still use Stripe without enabling this.</i>
+                   </p>
+               </div>
+            </div>
+      </div>
+   </div>
+
       <div class="card">
          <div class="card-header">
             <h4 class="card-header-title text-muted">
@@ -404,7 +472,7 @@
                      <label>
                      Currency Mode
                      </label>
-                     {!! Form::select('go_cardless_currency_code', array('EUR' => 'EUR', 'GDP' => 'GDP', 'SEK' => 'SEK'), $systemSetting->go_cardless_currency_code,['id' => 'go_cardless_currency_code', 'class' => 'form-control', 'data-toggle' => 'select']); !!}
+                     {!! Form::select('go_cardless_currency_code', array('AUD' => 'AUD', 'CAD' => 'CAD', 'DKK' => 'DKK', 'EUR' => 'EUR', 'GBP' => 'GBP', 'NZD' => 'NZD', 'SEK' => 'SEK', 'USD' => 'USD'), $systemSetting->go_cardless_currency_code,['id' => 'go_cardless_currency_code', 'class' => 'form-control', 'data-toggle' => 'select']); !!}
                   </div>
                </div>
             </div>
@@ -537,12 +605,25 @@
 <script src="/assets/libs/jquery-payment-plugin/jquery.payment.min.js"></script>
 <script src="/assets/libs/bootstrap-colorpicker-plugin/bootstrap-colorpicker.min.js"></script>
 <script src="/assets/js/pages/settings/settings.js"></script>
+<script src="/assets/libs/tinymce/tinymce.min.js"></script>
+<script src="/assets/libs/tinymce/jquery.tinymce.min.js"></script>
 
 <script>
    $(function () {
      $('[data-toggle="tooltip"]').tooltip()
    })
     $(function() {
+
+      $('textarea#login_page_message').tinymce({
+         height: 300,
+         menubar: false,
+         plugins: [
+            'advlist autolink lists link anchor',
+            'searchreplace visualblocks code paste'
+         ],
+         toolbar: 'undo redo | formatselect | bold italic underline link | alignleft aligncenter alignright alignjustify | bullist numlist | removeformat'
+      });
+
         $('#primaryColor').colorpicker({
             customClass: 'colorpicker-2x',
             sliders: {
