@@ -43,6 +43,7 @@ RUN mkdir /etc/service/nginx
 COPY deploy/services/nginx.sh /etc/service/nginx/run
 
 COPY deploy/conf/nginx/portal-rapidwireless.template /etc/nginx/conf.d/portal-rapidwirelss.template
+RUN rm -rf /etc/nginx/conf.d/customerportal.template /etc/nginx/sites-enabled/default /etc/nginx/sites-available/default
 
 VOLUME ['/var/www/html/storage']
 EXPOSE 80 443
