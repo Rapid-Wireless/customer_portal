@@ -1,0 +1,78 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kubernetes.digitalocean.com/load-balancer-id: a396ba28-24e3-44e9-9b29-ce43c2a299cc
+  labels:
+    app: customer-portal
+  name: customer-portal
+  namespace: customer-portal
+spec:
+  externalTrafficPolicy: Cluster
+  ports:
+  - name: http
+    nodePort: 31225
+    port: 80
+    protocol: TCP
+    targetPort: http
+  - name: https
+    nodePort: 31226
+    port: 443
+    protocol: TCP
+    targetPort: https
+  selector:
+    app: customer-portal
+  sessionAffinity: None
+  type: LoadBalancer
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  labels:
+    app: customer-portal
+  name: customer-portal
+  namespace: customer-portal
+spec:
+  tls:
+  - hosts:
+    - portal.rapidwireless.com.au
+    secretName: portal-rapidwireless-tls
+  rules:
+  - host: portal.rapidwireless.com.au
+    http:
+      paths:
+      - backend:
+          serviceName: customer-portal 
+          servicePort: http
+        path: /
+        pathType: ImplementationSpecific
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-portal
+  namespace: customer-portal
+  labels:
+    app: customer-portal
+spec:
+  selector:
+    matchLabels:
+      app: customer-portal
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: customer-portal
+    spec:
+      containers:
+      - image: docker.pkg.github.com/rapid-wireless/customer_portal/customer_portal:latest
+        name: customer-portal
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+      imagePullSecrets:
+        - name: dockerconfigjson-github-packages 
