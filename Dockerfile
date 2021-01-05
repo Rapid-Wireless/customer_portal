@@ -44,7 +44,7 @@ COPY deploy/services/php-fpm.sh /etc/service/php-fpm/run
 RUN mkdir /etc/service/nginx
 COPY deploy/services/nginx.sh /etc/service/nginx/run
 
-COPY deploy/conf/nginx/portal-rapidwireless.template /etc/nginx/conf.d/portal-rapidwirelss.template
+COPY deploy/conf/nginx/portal-rapidwireless.template /etc/nginx/conf.d/portal-rapidwireless.template
 
 VOLUME ['/var/www/html/storage']
 EXPOSE 80 443
